@@ -300,20 +300,11 @@ function App(props) {
         <Menu.Item key="/">
           <Link to="/">App Home</Link>
         </Menu.Item>
-        <Menu.Item key="/debug">
-          <Link to="/debug">Debug Contracts</Link>
+        <Menu.Item key="/NFT Contract">
+          <Link to="/nftcontract">NFT Contract</Link>
         </Menu.Item>
-        <Menu.Item key="/hints">
-          <Link to="/hints">Hints</Link>
-        </Menu.Item>
-        <Menu.Item key="/exampleui">
-          <Link to="/exampleui">ExampleUI</Link>
-        </Menu.Item>
-        <Menu.Item key="/mainnetdai">
-          <Link to="/mainnetdai">Mainnet DAI</Link>
-        </Menu.Item>
-        <Menu.Item key="/subgraph">
-          <Link to="/subgraph">Subgraph</Link>
+        <Menu.Item key="/Escrow Contract">
+          <Link to="/escrow">Escrow Contract</Link>
         </Menu.Item>
       </Menu>
 
@@ -322,7 +313,7 @@ function App(props) {
           {/* pass in any web3 props to this Home component. For example, yourLocalBalance */}
           <Home yourLocalBalance={yourLocalBalance} readContracts={readContracts} />
         </Route>
-        <Route exact path="/debug">
+        <Route exact path="/nftcontract">
           {/*
                 🎛 this scaffolding is full of commonly used components
                 this <Contract/> component will automatically parse your ABI
@@ -337,7 +328,10 @@ function App(props) {
             blockExplorer={blockExplorer}
             contractConfig={contractConfig}
           />
-          <Contract
+          
+        </Route>
+        <Route path="/escrow">
+        <Contract
             name="YourContract"
             price={price}
             signer={userSigner}
@@ -345,14 +339,6 @@ function App(props) {
             address={address}
             blockExplorer={blockExplorer}
             contractConfig={contractConfig}
-          />
-        </Route>
-        <Route path="/hints">
-          <Hints
-            address={address}
-            yourLocalBalance={yourLocalBalance}
-            mainnetProvider={mainnetProvider}
-            price={price}
           />
         </Route>
         <Route path="/exampleui">
@@ -369,7 +355,7 @@ function App(props) {
             purpose={purpose}
           />
         </Route>
-        <Route path="/mainnetdai">
+        <Route path="/sample">
           <Contract
             name="DAI"
             customContract={mainnetContracts && mainnetContracts.contracts && mainnetContracts.contracts.DAI}
@@ -391,7 +377,7 @@ function App(props) {
             />
             */}
         </Route>
-        <Route path="/subgraph">
+        <Route path="/anotherone">
           <Subgraph
             subgraphUri={props.subgraphUri}
             tx={tx}

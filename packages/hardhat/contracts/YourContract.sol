@@ -1,15 +1,9 @@
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.0 <0.9.0;
-//SPDX-License-Identifier: MIT
 
-import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
-// import "@openzeppelin/contracts/access/Ownable.sol"; 
-// https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/access/Ownable.sol
-
-
-
-contract YourContract {
+contract YourContract{
     // we should use a safe math library for integers and implement in rest of code
 
 
@@ -34,12 +28,85 @@ contract YourContract {
     // maybe have this be a mapping instead? mapping(uint256 => uint256) indexToSellerBalance
     uint256[] public sellerBalances;
 
-    uint256 public constant THIRTY_DAYS_TO_SECONDS_CONVERSION = 30*24*60*60; //keep in mind we are using an epoch of 30 days, not necessarily a month //can also use a pure function to do this calculation
-
-
+    uint256 public constant PAYMENT_PERIODS_TO_SECONDS = 30*24*60*60; //keep in mind we are using an epoch of 30 days, not necessarily a month //can also use a pure function to do this calculation
+    // uint256 public constant PAYMENT_PERIODS_TO_SECONDS = 15; 
 
 
     /////////need to insert receiver
+
+
+    // bugs here 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    function makePayment(uint256 _listingIndex) public payable {
+        // // how to prevent overpaying past price amount? or at least handling the extra
+        // maybe have reentrant modifier here?
+
+        require(msg.value > 0, "there was no eth sent with this payment");
+        require(!hasDefaulted(_listingIndex), "buyer has defaulted");
+
+        Listing storage listing = listings[_listingIndex];
+
+        require(listing.isActive, "this listing is not active");
+
+        listing.amountPaid += msg.value;
+        // consider security risks of next line
+        sellerBalances[_listingIndex] += msg.value;
+
+        // if (isPaidOff(_listingIndex)) {
+        //     // emit paid off event
+        //     // maybe change a struct veriable "paidOff" to true and require that when buyer withdraws nft
+        // }        
+    }
+
+    function isPaidOff(uint256 _listingIndex) public view returns (bool) {
+        Listing memory listing = listings[_listingIndex];
+
+        if (listing.amountPaid >= listing.price) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    //change function name
+    // this function needs the most attention for security. should not be able to return true if has buyer that has been making payments on time
+    function hasDefaulted(uint256 _listingIndex) public view returns (bool) {
+        Listing memory listing = listings[_listingIndex];
+
+        uint256 timePassedSinceLock = block.timestamp - listing.timeAtLock;
+        uint256 paymentPeriodsPassed = (timePassedSinceLock / PAYMENT_PERIODS_TO_SECONDS);
+
+        if (paymentPeriodsPassed >= listing.paymentPeriods) {
+            paymentPeriodsPassed = listing.paymentPeriods - 1;  // can revise this and amountDueNextPayment below later for readability, but works for now
+        }
+
+        uint256 amountPerPayPeriod = getAmountPerPayPeriod(_listingIndex);
+        uint256 amountDueNextPayment = amountPerPayPeriod*(paymentPeriodsPassed + 1) - listing.amountPaid;
+
+        if (amountDueNextPayment > amountPerPayPeriod) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    //change function name
+    function getAmountPerPayPeriod(uint256 _listingIndex) public view returns (uint256){
+        Listing memory listing = listings[_listingIndex];
+        //consider calculation below - when calculating amount due, it may be less for the first month, if the initial payment was more than the required initial payment. alternativeley, this could be considered when first calculating amounts per pay period after a listing has been accepted - resuling in more on the first month, but less every month (and the same amount every month)
+        return (((listing.price - listing.initialPayment) / listing.paymentPeriods) + 1); // fix rounding error by adding 1. so this will be a small additional cost to the buery. consider if any vulnerabilities here
+    }
+
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 
@@ -54,12 +121,12 @@ contract YourContract {
         uint256 _initialPayment) public {
         
         require(IERC721(_nftContractAddress).ownerOf(_tokenId) == msg.sender, "you are not the owner of this nft");
-        require(IERC721(_nftContractAddress).getApproved(_tokenId) == address(this), "this address has not been approved by seller");
+        require(IERC721(_nftContractAddress).getApproved(_tokenId) == address(this), "this contract has not been approved by seller");
         //require deposit amount < listing price??
         //require months less than some amount of time?
 
         require(_payPeriods > 0); // include error message
-        uint256 lockTime = _payPeriods * THIRTY_DAYS_TO_SECONDS_CONVERSION;
+        uint256 lockTime = _payPeriods * PAYMENT_PERIODS_TO_SECONDS;
         require(lockTime % 30 == 0); // maybe unnecessary // need error message                
 
         Listing memory listing = Listing({
@@ -119,59 +186,6 @@ contract YourContract {
     }
 
 
-    //called from buyer
-    function makePayment(uint256 _listingIndex) public payable {
-        // // how to prevent overpaying past price amount? or at least handling the extra
-        // maybe have reentrant modifier here?
-
-        require(msg.value > 0, "there was no eth sent with this payment");
-        require(!hasDefaulted(_listingIndex), "buyer has defaulted");
-
-        Listing memory listing = listings[_listingIndex];
-
-        require(listing.isActive);
-
-        listing.amountPaid += msg.value;
-        // consider security risks of next line
-        sellerBalances[_listingIndex] += msg.value;
-
-        if (isPaidOff(_listingIndex)) {
-            // emit paid off event
-            // maybe change a struct veriable "paidOff" to true and require that when buyer withdraws nft
-        }        
-    }
-
-    function isPaidOff(uint256 _listingIndex) public view returns (bool) {
-        Listing memory listing = listings[_listingIndex];
-
-        if (listing.amountPaid >= listing.price) {
-            return true;
-        }
-
-        return false;
-    }
-
-    //change function name
-    // this function needs the most attention for security. should not be able to return true if has buyer that has been making payments on time
-    function hasDefaulted(uint256 _listingIndex) public view returns (bool) {
-        Listing memory listing = listings[_listingIndex];
-
-        uint256 timePassedSinceLock = block.timestamp - listing.timeAtLock;
-        uint256 paymentPeriodsPassed = (timePassedSinceLock / THIRTY_DAYS_TO_SECONDS_CONVERSION);
-
-        if (paymentPeriodsPassed >= listing.paymentPeriods) {
-            paymentPeriodsPassed = listing.paymentPeriods - 1;  // can revise this and amountDueNextPayment below later for readability, but works for now
-        }
-
-        uint256 amountPerPayPeriod = getAmountPerPayPeriod(_listingIndex);
-        uint256 amountDueNextPayment = amountPerPayPeriod*(paymentPeriodsPassed + 1) - listing.amountPaid;
-
-        if (amountDueNextPayment > amountPerPayPeriod) {
-            return true;
-        }
-
-        return false;
-    }
 
     function sellerWithdrawBalance(uint256 _listingIndex) public {
         Listing storage listing = listings[_listingIndex];
@@ -181,7 +195,7 @@ contract YourContract {
         // consider reentrancy here
         uint256 amountToWithdraw = sellerBalances[_listingIndex];
 
-        require(amountToWithdraw < listing.price); // maybe unnecessary // add error message
+        // require(amountToWithdraw < listing.price); // maybe unnecessary // add error message
         
         sellerBalances[_listingIndex] = 0;
 
@@ -208,11 +222,27 @@ contract YourContract {
         IERC721(listing.nftContractAddress).transferFrom(address(this), _to, listing.tokenId);
     }
 
-    //change function name
-    function getAmountPerPayPeriod(uint256 _listingIndex) public view returns (uint256){
+    // change function name
+    function getAmountDueByPayment(uint256 _listingIndex) public view returns (uint256) {
+        Listing storage listing = listings[_listingIndex];
+
+        require(!hasDefaulted(_listingIndex), "this payment agreement has defaulted");
+
+        uint256 timePassedSinceLock = block.timestamp - listing.timeAtLock;
+        uint256 paymentPeriodsPassed = (uint(timePassedSinceLock) / PAYMENT_PERIODS_TO_SECONDS);
+        uint256 amountPerPayPeriod = getAmountPerPayPeriod(_listingIndex);
+
+        uint256 amountDueNextPayment = amountPerPayPeriod*(paymentPeriodsPassed + 1) - listing.amountPaid;
+
+        return amountDueNextPayment;
+    }
+
+
+    
+
+    function getAmountPaid(uint256 _listingIndex) public view returns (uint256) {
         Listing memory listing = listings[_listingIndex];
-        //consider calculation below - when calculating amount due, it may be less for the first month, if the initial payment was more than the required initial payment. alternativeley, this could be considered when first calculating amounts per pay period after a listing has been accepted - resuling in more on the first month, but less every month (and the same amount every month)
-        return (((listing.price - listing.initialPayment) / listing.paymentPeriods) + 1); // fix rounding error by adding 1. so this will be a small additional cost to the buery. consider if any vulnerabilities here
+        return listing.amountPaid;
     }
 
     // called by seller
@@ -249,7 +279,7 @@ contract YourContract {
         uint256[] memory timesDue = new uint256[](paymentPeriods);
 
         for (uint256 i = 0; i < paymentPeriods; i++) {
-            timesDue[i] = listing.timeAtLock + i*THIRTY_DAYS_TO_SECONDS_CONVERSION;
+            timesDue[i] = listing.timeAtLock + i*PAYMENT_PERIODS_TO_SECONDS;
         }
 
         return timesDue;       
@@ -259,29 +289,15 @@ contract YourContract {
         Listing storage listing = listings[_listingIndex];
 
         uint256 timePassedSinceLock = block.timestamp - listing.timeAtLock;
-        uint256 timeSinceLastDueDate = timePassedSinceLock % THIRTY_DAYS_TO_SECONDS_CONVERSION;
-        uint256 timeUntilNextDueDate = THIRTY_DAYS_TO_SECONDS_CONVERSION - timeSinceLastDueDate;
+        uint256 timeSinceLastDueDate = timePassedSinceLock % PAYMENT_PERIODS_TO_SECONDS;
+        uint256 timeUntilNextDueDate = PAYMENT_PERIODS_TO_SECONDS - timeSinceLastDueDate;
 
         uint256 nextPaymentTime = block.timestamp + timeUntilNextDueDate;
 
         return nextPaymentTime;
     }
 
-    // change function name
-    function getAmountDueByPayment(uint256 _listingIndex) public view returns (uint256) {
-        Listing storage listing = listings[_listingIndex];
-
-        require(!hasDefaulted(_listingIndex), "this payment agreement has defaulted");
-
-        uint256 timePassedSinceLock = block.timestamp - listing.timeAtLock;
-        uint256 paymentPeriodsPassed = (timePassedSinceLock / THIRTY_DAYS_TO_SECONDS_CONVERSION);
-        uint256 amountPerPayPeriod = getAmountPerPayPeriod(_listingIndex);
-
-        uint256 amountDueNextPayment = amountPerPayPeriod*(paymentPeriodsPassed + 1) - listing.amountPaid;
-
-        return amountDueNextPayment;
-    }
-
+    
     function isActive(uint256 _listingIndex) public view returns (bool) {
         Listing storage listing = listings[_listingIndex];
 
